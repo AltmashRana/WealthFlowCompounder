@@ -484,8 +484,8 @@
             row.id = `row-${id}`;
             row.innerHTML = `
                 <div class="field"><input type="text" value="${name}" placeholder="Fund/Asset Name" class="title-input"></div>
-                <div class="field"><input type="number" class="weight-input" value="${split}" placeholder="Split %"></div>
-                <div class="field"><input type="number" class="return-input" value="${ret}" placeholder="Return %"></div>
+                <div class="field"><input type="number" class="weight-input" value="${split}" placeholder="% Split"></div>
+                <div class="field"><input type="number" class="return-input" value="${ret}" placeholder="% Return"></div>
                 <button class="btn-remove" onclick="removeRow(${id})">&times;</button>
             `;
             container.appendChild(row);
