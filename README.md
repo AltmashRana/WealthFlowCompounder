@@ -12,7 +12,6 @@ Plug in your salary, savings, and portfolio. Watch the projection move in real t
 - **Splits your portfolio** across assets with different returns — anything unallocated sits as cash, growing at 0%
 - **Grows your salary** with your investment amount each year, on autopilot
 - **Adjusts for inflation** — every big number also shows in today's money, so it's never mistaken for real buying power
-- **Estimates retirement income** using the 4% rule (the standard safe withdrawal rate — fixed, not a setting, since almost no one changes it)
 - **Prices your life goals** — a car, a house, a wedding — at the age you plan them, inflation-adjusted, and shows what pulling that money out costs your retirement
 - **Separates contributions from growth**, charted side by side across your whole timeline
 - **Converts your total** into USD and gold equivalents
