@@ -689,6 +689,94 @@
         #loadBtn {
             display: none;
         }
+
+        /* -------------------------- toast + confirm dialog -------------------------- */
+
+        .toast {
+            position: fixed;
+            left: 50%;
+            bottom: 28px;
+            transform: translate(-50%, 20px);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+            padding: 13px 20px;
+            border-radius: 14px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-main);
+            max-width: min(90vw, 420px);
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+
+        .toast .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex: 0 0 auto;
+            background: var(--primary);
+        }
+
+        .toast.success .dot {
+            background: var(--accent);
+        }
+
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            z-index: 1001;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .modal-backdrop.show {
+            opacity: 1;
+        }
+
+        .modal-box {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 24px;
+            max-width: 360px;
+            width: 100%;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+            transform: scale(0.95);
+            transition: transform 0.2s ease;
+        }
+
+        .modal-backdrop.show .modal-box {
+            transform: scale(1);
+        }
+
+        .modal-box p {
+            font-size: 0.9rem;
+            color: var(--text-main);
+            line-height: 1.5;
+            margin-bottom: 20px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
     </style>
 </head>
 
@@ -1007,6 +1095,10 @@
 
         const MAX_YEARS = 100;
 
+        // The 4% rule is the standard safe-withdrawal convention; exposing it as an input
+        // bought a field, a slider and an argument, for a number almost nobody changes.
+        const WITHDRAW = 0.04;
+
         // Contributions are driven by the rupee amount, not the 1-decimal percent:
         // 13.3% of a 250k salary is Rs.83/mo away from the 33,333 the user typed,
         // which compounds into a six-figure gap over a career.
@@ -1146,7 +1238,6 @@
             btn.onclick = () => { row.remove(); calculate(); };
             row.appendChild(btn);
             document.getElementById(container).appendChild(row);
-            attachListeners();
             calculate();
         }
 
@@ -1166,12 +1257,11 @@
             ]);
         }
 
-        function attachListeners() {
-            document.querySelectorAll('input:not([type=range])').forEach(input => {
-                input.removeEventListener('input', calculate);
-                input.addEventListener('input', calculate);
-            });
-        }
+        // One delegated listener covers every current and future row — no per-input
+        // binding to redo each time addInvestmentRow/addGoalRow creates one.
+        document.addEventListener('input', e => {
+            if (e.target.matches('input:not([type=range])')) calculate();
+        });
 
         // min="0" bounds the spinner but not typing. Clamp on commit rather than on every
         // keystroke, so typing a minus sign mid-entry does not fight the user.
@@ -1205,6 +1295,7 @@
 
         const num = id => parseFloat(document.getElementById(id).value) || 0;
         const set = (id, txt) => document.getElementById(id).innerText = txt;
+        const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
         const OUT = ['resReal', 'resIncome', 'resUSD', 'resGold', 'resFinalSalary', 'resReturn', 'resYears'];
 
@@ -1228,7 +1319,8 @@
             const inflation = Math.max(num('inflation') / 100, -0.99);
             const gold = num('gold'), usd = num('usd');
 
-            // The rupee figure is authoritative; fall back to the percent only when there is no salary to take one of.
+            // The rupee value is authoritative either way; cap it at salary when there is one
+            // to invest out of, so a stale Invest Value can't outspend an edited-down salary.
             const monthlyInvest = salary > 0 ? Math.min(num('investVal'), salary) : num('investVal');
 
             let totalWeight = 0, weightedReturn = 0;
@@ -1326,16 +1418,57 @@
             }
 
             syncSliders();
-            updateHash();
         }
 
-        const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        /* ------------------------------ toast / confirm ------------------------------ */
+        // Replaces alert()/confirm() with something that matches the page instead of
+        // stalling it behind the browser chrome.
+
+        let toastTimer = null;
+
+        function toast(msg, type = 'info') {
+            clearTimeout(toastTimer);
+            let el = document.querySelector('.toast');
+            if (!el) {
+                el = document.createElement('div');
+                el.className = 'toast';
+                el.innerHTML = '<span class="dot"></span><span class="msg"></span>';
+                document.body.appendChild(el);
+            }
+            el.className = 'toast ' + type;
+            el.querySelector('.msg').textContent = msg;
+            requestAnimationFrame(() => el.classList.add('show'));
+            toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+        }
+
+        function customConfirm(msg) {
+            return new Promise(resolve => {
+                const backdrop = document.createElement('div');
+                backdrop.className = 'modal-backdrop';
+                backdrop.innerHTML = '<div class="modal-box"><p></p><div class="modal-actions">'
+                    + '<button class="btn-action btn-secondary">Cancel</button>'
+                    + '<button class="btn-action">Confirm</button></div></div>';
+                backdrop.querySelector('p').textContent = msg;
+                document.body.appendChild(backdrop);
+                requestAnimationFrame(() => backdrop.classList.add('show'));
+
+                const close = ok => {
+                    document.removeEventListener('keydown', onKey);
+                    backdrop.classList.remove('show');
+                    setTimeout(() => backdrop.remove(), 200);
+                    resolve(ok);
+                };
+                const onKey = e => { if (e.key === 'Escape') close(false); };
+                document.addEventListener('keydown', onKey);
+                backdrop.addEventListener('click', e => { if (e.target === backdrop) close(false); });
+                const [cancelBtn, okBtn] = backdrop.querySelectorAll('button');
+                cancelBtn.onclick = () => close(false);
+                okBtn.onclick = () => close(true);
+                okBtn.focus();
+            });
+        }
 
         /* ------------------------------ persistence ------------------------------ */
-
-        // The 4% rule is the standard safe-withdrawal convention; exposing it as an input
-        // bought a field, a slider and an argument, for a number almost nobody changes.
-        const WITHDRAW = 0.04;
 
         const FIELDS = ['savings', 'salary', 'age', 'retireAge', 'investPerc', 'investVal', 'raise', 'inflation', 'gold', 'usd'];
 
@@ -1367,7 +1500,7 @@
         function saveData() {
             localStorage.setItem(saveKey, JSON.stringify(collectState()));
             checkSavedStatus();
-            alert('Scenario successfully saved.');
+            toast('Scenario successfully saved.', 'success');
         }
 
         function loadSaved() {
@@ -1382,42 +1515,106 @@
         }
 
         /* ------------------------------ shareable URL ------------------------------ */
-        // The page is its own save file: the address bar always holds the current scenario.
+        // The URL is left alone while you work — it only changes when you press Share.
+        // That link is one param either way; what shrank is its value. A named-key JSON
+        // object is mostly repeated field names, so: (1) pack the state into a positional
+        // array instead, then (2) run it through the browser's own gzip (CompressionStream —
+        // no library). Together that took a typical 3-asset, 2-goal scenario from ~700
+        // characters to ~150. Browsers without CompressionStream fall back to the
+        // uncompressed compact array (#p=), still much shorter than the old named-key JSON.
 
         const TEST_MODE = location.hash === '#test';
-        let hashTimer = null;
 
-        function updateHash() {
-            if (TEST_MODE) return;
-            clearTimeout(hashTimer);
-            hashTimer = setTimeout(() => {
-                try {
-                    history.replaceState(null, '', '#d=' + encodeURIComponent(JSON.stringify(collectState())));
-                } catch (e) { }      // Safari rate-limits replaceState; a dropped update is harmless
-            }, 300);
+        function toCompact(d) {
+            return [d.savings, d.salary, d.age, d.retireAge, d.investPerc, d.investVal,
+                d.raise, d.inflation, d.gold, d.usd,
+                d.investments.map(i => [i.t, i.w, i.r]),
+                d.goals.map(g => [g.n, g.a, g.v])];
         }
 
-        function loadFromHash() {
-            const m = location.hash.match(/^#d=(.+)$/);
-            if (!m) return false;
-            try { applyState(JSON.parse(decodeURIComponent(m[1]))); return true; }
-            catch (e) { return false; }
+        function fromCompact(arr) {
+            const [savings, salary, age, retireAge, investPerc, investVal, raise, inflation, gold, usd, inv, goals] = arr;
+            return {
+                savings, salary, age, retireAge, investPerc, investVal, raise, inflation, gold, usd,
+                investments: (inv || []).map(([t, w, r]) => ({ t, w, r })),
+                goals: (goals || []).map(([n, a, v]) => ({ n, a, v }))
+            };
         }
 
-        function shareLink() {
-            clearTimeout(hashTimer);
-            const url = location.href.split('#')[0] + '#d=' + encodeURIComponent(JSON.stringify(collectState()));
-            history.replaceState(null, '', url);
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(url)
-                    .then(() => alert('Link copied. It carries this whole scenario.'))
-                    .catch(() => alert('Scenario is in the address bar — copy it from there.'));
-            } else alert('Scenario is in the address bar — copy it from there.');
+        function b64urlEncode(bytes) {
+            let bin = '';
+            bytes.forEach(b => bin += String.fromCharCode(b));
+            return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        function b64urlDecode(str) {
+            str = str.replace(/-/g, '+').replace(/_/g, '/');
+            while (str.length % 4) str += '=';
+            const bin = atob(str);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            return bytes;
+        }
+
+        async function deflate(str) {
+            const cs = new CompressionStream('deflate-raw');
+            const w = cs.writable.getWriter();
+            w.write(new TextEncoder().encode(str));
+            w.close();
+            return new Uint8Array(await new Response(cs.readable).arrayBuffer());
+        }
+
+        async function inflate(bytes) {
+            const ds = new DecompressionStream('deflate-raw');
+            const w = ds.writable.getWriter();
+            w.write(bytes);
+            w.close();
+            return new TextDecoder().decode(await new Response(ds.readable).arrayBuffer());
+        }
+
+        async function buildShareUrl() {
+            const json = JSON.stringify(toCompact(collectState()));
+            const frag = window.CompressionStream
+                ? '#z=' + b64urlEncode(await deflate(json))     // compressed, needs CompressionStream to read back
+                : '#p=' + b64urlEncode(new TextEncoder().encode(json));  // plain compact, readable anywhere
+            return location.href.split('#')[0] + frag;
+        }
+
+        async function loadFromHash() {
+            const h = location.hash;
+            try {
+                if (h.startsWith('#z=') && window.DecompressionStream) {
+                    applyState(fromCompact(JSON.parse(await inflate(b64urlDecode(h.slice(3))))));
+                    return true;
+                }
+                if (h.startsWith('#p=')) {
+                    applyState(fromCompact(JSON.parse(new TextDecoder().decode(b64urlDecode(h.slice(3))))));
+                    return true;
+                }
+            } catch (e) { }
+            return false;
+        }
+
+        // The address bar is left alone — Share's whole job is putting the link on the
+        // clipboard. It only touches the bar as a last resort, if copying isn't possible.
+        async function shareLink() {
+            const url = await buildShareUrl();
+            if (!navigator.clipboard) {
+                history.replaceState(null, '', url);
+                return toast('Clipboard unavailable — the link is in the address bar instead.');
+            }
+            try {
+                await navigator.clipboard.writeText(url);
+                toast('Link copied to your clipboard.', 'success');
+            } catch (e) {
+                history.replaceState(null, '', url);
+                toast('Could not copy — the link is in the address bar instead.');
+            }
         }
 
         /* --------------------------- theme / privacy --------------------------- */
 
-        const sv = (k, v) => { try { v === undefined ? null : localStorage.setItem(k, v); } catch (e) { } };
+        const sv = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { } };
         const ld = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 
         const ICON = {
@@ -1578,8 +1775,8 @@
             document.getElementById('chartHair').hidden = true;
         }
 
-        function resetAll() {
-            if (confirm("Reset current inputs to default?")) {
+        async function resetAll() {
+            if (await customConfirm('Reset current inputs to default?')) {
                 location.hash = '';
                 location.reload();
             }
@@ -1681,7 +1878,6 @@
             buildSliders();
             loadFromHash();
             checkSavedStatus();
-            attachListeners();
             const wrap = document.getElementById('chartWrap');
             wrap.addEventListener('pointermove', chartHover);
             wrap.addEventListener('pointerleave', chartLeave);
