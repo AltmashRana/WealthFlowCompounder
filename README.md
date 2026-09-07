@@ -32,7 +32,7 @@ Plain HTML, CSS, and JavaScript — one file, zero dependencies, works offline.
 
 ## How the math holds up
 
-The number-crunching lives in one pure function (`project`), separate from the UI, so it can be checked on its own. Open `index.html#test` and check the console — 31 automated checks cover compounding, salary raises, inflation, goal pricing, and edge cases.
+The number-crunching lives in one pure function (`project`), separate from the UI, so it can be checked on its own. Open `index.html#test` and check the console — multiple automated checks cover compounding, salary raises, inflation, goal pricing, and edge cases.
 
 A few things done right under the hood:
 - Contributions land at the *start* of each month and earn that month's return (annuity-due), using the true monthly compounding rate — not annual ÷ 12
@@ -46,5 +46,5 @@ A few things done right under the hood:
 Everything runs in your browser — your numbers are never uploaded.
 
 - **Live Rates** is the only feature that calls the internet (a public currency API, no personal data sent)
-- **Share** puts your inputs in the URL itself — great for sending a scenario, but anyone with the link can see the numbers, and it may sit in browser history or chat logs
+- **Share** puts your inputs in the URL itself — great for sending a scenario
 - **Save Scenario** keeps everything local, if you'd rather nothing leave your machine
